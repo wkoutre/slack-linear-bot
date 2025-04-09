@@ -1,0 +1,33 @@
+{
+  "name": "slack-linear-bot",
+  "version": "1.0.0",
+  "description": "Slack bot to integrate with Linear for issue tracking",
+  "type": "module",
+  "main": "dist/app.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/app.js",
+    "dev": "node --no-warnings --loader ts-node/esm src/app.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "slack",
+    "linear",
+    "bolt",
+    "bot"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@linear/sdk": "^38.0.0",
+    "@modelcontextprotocol/sdk": "1.9.0",
+    "@slack/bolt": "^3.19.0",
+    "@smithery/sdk": "^1.0.4",
+    "dotenv": "16.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.5.3"
+  }
+}
