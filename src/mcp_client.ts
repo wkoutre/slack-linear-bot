@@ -101,14 +101,15 @@ async function initializeMcpClient(): Promise<Client> {
         mcpClient = client;
         isConnected = true;
 
-        const testResult = await mcpClient?.callTool({
-          name: McpToolName.SearchIssues,
-          arguments: {
-            query: `I am unable to click "learn more" on UniswapX info toggle. Expected behavior?`,
-          },
-        });
+        // Uncomment this if you want to test the local MCP server upon connection
+        // const testResult = await mcpClient?.callTool({
+        //   name: McpToolName.SearchIssues,
+        //   arguments: {
+        //     query: `I am unable to click "learn more" on UniswapX info toggle. Expected behavior?`,
+        //   },
+        // });
 
-        console.log("Test result:", testResult);
+        // console.log("Test result:", testResult);
 
         return mcpClient;
       } catch (connectError) {
