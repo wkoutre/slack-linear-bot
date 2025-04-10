@@ -5,6 +5,20 @@ import { McpToolName } from "./enums.js";
 import { getMcpClient, markAsDisconnected } from "./mcp_client.js"; // Import MCP client and markAsDisconnected
 import util from "util"; // For formatting the output
 
+interface LinearItem {
+    title: string;
+    url: string;
+    status: string;
+    assignee?: string;
+    metadata: {
+      context: {
+        description: {
+          snippet: string;
+        };
+      };
+    };
+  }
+
 // Type for an MCP tool
 export type McpTool = {
     name: McpToolName;
@@ -343,10 +357,52 @@ export const createRateMatchingTicketsNode = (
             const linearIssues = context.results.linearSearchResults || [];
 
             // Format and display the raw search results
-            const formattedResult =
-                "```\n" +
-                util.inspect(linearIssues, { depth: null, colors: false }) +
-                "\n```";
+           
+
+        
+                const formatSimplifiedResult = (result: any): string => {
+                    if (!result || !result.content || !Array.isArray(result.content) || !result.content[0]) {
+                      return "```\nNo valid data found in result.content\n```";
+                    }
+                  
+                    const textContent = result.content[0].text;
+                    let itemsData: LinearItem[];
+                    try {
+                      itemsData = JSON.parse(textContent);
+                    } catch (error) {
+                      return "```\nError parsing content: " + error + "\n```";
+                    }
+                  
+                    // Limit to 5 items max
+                    const limitedItems = itemsData.slice(0, 5);
+                  
+                    const formattedItems = limitedItems.map((item: LinearItem) => {
+                      const title = item.title ?? "N/A";
+                      const description = item.metadata?.context?.description?.snippet ?? "N/A";
+                      const url = item.url ?? "N/A";
+                      const status = item.status ?? "N/A";
+                      const assigneeLine = item.assignee && item.assignee !== "Unassigned"
+                        ? `Assignee: ${item.assignee}`
+                        : "";
+                  
+                      const hyperlinkedTitle = url !== "N/A" ? `<${url}|${title}>` : title;
+                  
+                      return "```\n" + [
+                        `Title: ${hyperlinkedTitle}`,
+                        `Description: ${description}`,
+                        `Status: ${status}`,
+                        assigneeLine,
+                      ]
+                      .filter(line => line)
+                      .join("\n") + "\n```";
+                    });
+                  
+                    return formattedItems.join("\n\n");
+                  };
+        
+            const formattedResult = formatSimplifiedResult(linearIssues);
+
+
             await sayFn(`Found potential matches in Linear:\n${formattedResult}`);
 
             if (!linearIssues || linearIssues.length === 0) {
