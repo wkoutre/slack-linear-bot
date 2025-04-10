@@ -4,7 +4,6 @@ import Bolt, {
 } from "@slack/bolt";
 import dotenv from "dotenv";
 import { getMcpClient, markAsDisconnected } from "./mcp_client.js"; // Import MCP client and markAsDisconnected
-import util from "util"; // For formatting the output
 import { processMessageWithLLM, type McpTool, type LlmResponse } from "./llmquery.js";
 
 dotenv.config();
@@ -108,20 +107,8 @@ app.message(async ({ message, say }: SlackEventMiddlewareArgs<"message">) => {
             return; // Don't retry if LLM processing failed
           }
 
-          console.log(
-            `Attempt ${attempt}: Calling tool: ${llmResponse.tool.name} with params:`,
-            llmResponse.parameters
-          );
-
-          // Call the search tool
-          result = await mcpClient.callTool({
-            name: llmResponse.tool.name,
-            arguments: {
-              ...llmResponse.parameters,
-              first: 10,
-            },
-          });
-
+          // Format and display the results from the processing pipeline
+          // The MCP tool call has already happened in the processing pipeline
           console.log("MCP Tool Call Successful");
           success = true;
           break; // Exit loop on success
@@ -152,16 +139,6 @@ app.message(async ({ message, say }: SlackEventMiddlewareArgs<"message">) => {
         // This should ideally be caught by the re-throw above, but as a safeguard:
         throw new Error("MCP Tool call failed after retries.");
       }
-
-      console.log("MCP Tool Result:", result);
-      const formattedResult =
-        "```\n" +
-        util.inspect(result, { depth: null, colors: false }) +
-        "\n```";
-      await say({
-        text: `Found potential matches in Linear:\n${formattedResult}`,
-        thread_ts: thread_ts,
-      });
     } catch (error) {
       // Outer catch for non-retried errors or final failure
       console.error("Error during Linear search or processing (final):", error);

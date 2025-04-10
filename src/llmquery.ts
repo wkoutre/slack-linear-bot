@@ -2,6 +2,8 @@ import { OpenAI } from "openai";
 import fs from "node:fs";
 import path from "path";
 import { McpToolName } from "./enums.js";
+import { getMcpClient, markAsDisconnected } from "./mcp_client.js"; // Import MCP client and markAsDisconnected
+import util from "util"; // For formatting the output
 
 // Type for an MCP tool
 export type McpTool = {
@@ -28,7 +30,8 @@ export type ImageContent = {
 export enum NodeType {
     PROCESS_IMAGES = "process_images",
     QUERY_LLM = "query_llm",
-    LINEAR_SEARCH = "linear_search"
+    LINEAR_SEARCH = "linear_search",
+    RATE_MATCHING_TICKETS = "rate_matching_tickets"
 }
 
 // Node interface - base for all task nodes
@@ -64,6 +67,12 @@ export interface QueryLLMNode extends Node<string> {
 export interface LinearSearchNode extends Node<LlmResponse> {
     type: NodeType.LINEAR_SEARCH;
     query: string;
+}
+
+// Rate matching tickets node
+export interface RateMatchingTicketsNode extends Node<string> {
+    type: NodeType.RATE_MATCHING_TICKETS;
+    userMessage: string;
 }
 
 // Task pipeline to execute multiple nodes with dependencies
@@ -213,7 +222,6 @@ export const createQueryLLMNode = (
         type: NodeType.QUERY_LLM,
         prompt,
         text,
-        model: "gpt-4o-mini",
         dependencies,
         async execute(context: ExecutionContext): Promise<string> {
             const llm = new OpenAI({
@@ -226,7 +234,7 @@ export const createQueryLLMNode = (
             console.log(`Querying LLM with prompt and ${imageContents.length} images`);
 
             const response = await llm.responses.create({
-                model: this.model as "gpt-4o-mini",
+                model: "gpt-4o-mini",
                 input: [
                     {
                         role: "user",
@@ -267,19 +275,127 @@ export const createLinearSearchNode = (
 
             if (searchTool) {
                 console.log(`Found ${McpToolName.SearchIssues} tool. Preparing call with query: ${this.query}`);
-                return {
-                    tool: searchTool,
-                    parameters: { query: this.query },
-                };
+
+                try {
+                    // Get MCP client
+                    const mcpClient = await getMcpClient();
+
+                    // Prepare parameters
+                    const parameters = { query: this.query, first: 10 };
+                    console.log(`Calling MCP tool: ${searchTool.name} with params:`, parameters);
+
+                    // Call the search tool
+                    const result = await mcpClient.callTool({
+                        name: searchTool.name,
+                        arguments: parameters,
+                    });
+
+                    console.log("MCP Tool Call Successful");
+
+                    // Store the search results in the context for later nodes to use
+                    context.results.linearSearchResults = result;
+
+                    // Return the response with tool and parameters
+                    return {
+                        tool: searchTool,
+                        parameters: parameters,
+                    };
+                } catch (error) {
+                    console.error("Error calling MCP tool:", error);
+                    return {
+                        tool: null,
+                        parameters: null,
+                        error: `Failed to search Linear: ${error instanceof Error ? error.message : String(error)}`
+                    };
+                }
             }
 
             // Fallback if search tool isn't available
             console.error(`${McpToolName.SearchIssues} tool not found in available tools!`);
-            return {
+            const errorResult = {
                 tool: null,
                 parameters: null,
                 error: "Linear search tool is currently unavailable.",
             };
+
+            // Store the error result in the context
+            context.inputs.linearSearchResult = errorResult;
+
+            return errorResult;
+        }
+    };
+};
+
+// Rate matching tickets node implementation
+export const createRateMatchingTicketsNode = (
+    id: string,
+    userMessage: string,
+    dependencies: string[] = [],
+    sayFn: (message: string) => Promise<void>
+): RateMatchingTicketsNode => {
+    return {
+        id,
+        type: NodeType.RATE_MATCHING_TICKETS,
+        userMessage,
+        dependencies,
+        async execute(context: ExecutionContext): Promise<string> {
+            // Get search results from context - first display raw results
+            const linearIssues = context.results.linearSearchResults || [];
+
+            // Format and display the raw search results
+            const formattedResult =
+                "```\n" +
+                util.inspect(linearIssues, { depth: null, colors: false }) +
+                "\n```";
+            await sayFn(`Found potential matches in Linear:\n${formattedResult}`);
+
+            if (!linearIssues || linearIssues.length === 0) {
+                const noIssuesMessage = "No matching tickets found to rate.";
+                console.log(noIssuesMessage);
+                return noIssuesMessage;
+            }
+
+            // Read the rating prompt
+            const prompt = await fs.promises.readFile("src/prompts/rate_matching_tickets.txt", "utf-8");
+
+            const llm = new OpenAI({
+                apiKey: process.env.OPENAI_API_KEY,
+            });
+
+            // Prepare the prompt with user message and tickets data
+            const ratingPrompt = `${prompt}
+                <User message>
+                ${this.userMessage}
+                </User message>
+
+                <Tickets from Linear>
+                ${JSON.stringify(linearIssues, null, 2)}
+                </Tickets from Linear>`;
+
+            console.log("Querying LLM to rate matching tickets");
+
+            const response = await llm.responses.create({
+                model: "gpt-4o-mini",
+                input: [
+                    {
+                        role: "user",
+                        content: [
+                            { type: "input_text", text: ratingPrompt },
+                        ],
+                    },
+                ]
+            });
+
+            const ratingResult = response.output_text;
+            console.log("Rating result:", ratingResult);
+
+            // Send the rating results to the user
+            await sayFn(ratingResult);
+
+            // Store the rating results in the context
+            context.inputs.ticketRatings = ratingResult;
+
+            return ratingResult;
         }
     };
 };
@@ -315,10 +431,15 @@ export async function processMessageWithLLM(
             createLinearSearchNode("linearSearch", text, [queryLLMId])
         );
 
+        // Add rating node that depends on linear search
+        const rateMatchingId = pipeline.addNode(
+            createRateMatchingTicketsNode("rateMatching", text, [linearSearchId], sayFn)
+        );
+
         // Execute the pipeline
         const results = await pipeline.execute({ availableTools });
 
-        // Return the linear search result
+        // Return the linear search result instead of the rating result
         return results[linearSearchId] as LlmResponse;
     } catch (error) {
         console.error("Error in LLM processing pipeline:", error);
