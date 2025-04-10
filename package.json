@@ -23,7 +23,8 @@
     "@modelcontextprotocol/sdk": "1.9.0",
     "@slack/bolt": "^3.19.0",
     "@smithery/sdk": "^1.0.4",
-    "dotenv": "16.4.7"
+    "dotenv": "16.4.7",
+    "openai": "^4.93.0"
   },
   "devDependencies": {
     "@types/node": "^20.14.9",
