@@ -11,13 +11,13 @@ interface LinearItem {
     status: string;
     assignee?: string;
     metadata: {
-      context: {
-        description: {
-          snippet: string;
+        context: {
+            description: {
+                snippet: string;
+            };
         };
-      };
     };
-  }
+}
 
 // Type for an MCP tool
 export type McpTool = {
@@ -74,7 +74,6 @@ export interface QueryLLMNode extends Node<string> {
     type: NodeType.QUERY_LLM;
     prompt: string;
     text: string;
-    model?: string;
 }
 
 // Linear search node
@@ -215,8 +214,6 @@ export const createProcessImagesNode = (id: string, files: string[]): ProcessIma
             }
 
             console.log(`Processed ${imageContents.length} downloaded images`);
-            context.inputs.imageContents = imageContents;
-
             return imageContents;
         },
         dependencies: []
@@ -243,7 +240,7 @@ export const createQueryLLMNode = (
             });
 
             // Get image contents from previous node if available
-            const imageContents = context.inputs.imageContents || [];
+            const imageContents = context.results.processImages || [];
 
             console.log(`Querying LLM with prompt and ${imageContents.length} images`);
 
@@ -260,8 +257,9 @@ export const createQueryLLMNode = (
                 ]
             });
 
-            console.log("LLM Response:", response.output_text);
-            await sayFn(response.output_text);
+            const formattedResponse = `\`\`\`\n${response.output_text}\n\`\`\``;
+            console.log("LLM Response:", formattedResponse);
+            await sayFn(formattedResponse);
             return response.output_text;
         }
     };
@@ -357,49 +355,47 @@ export const createRateMatchingTicketsNode = (
             const linearIssues = context.results.linearSearchResults || [];
 
             // Format and display the raw search results
-           
 
-        
-                const formatSimplifiedResult = (result: any): string => {
-                    if (!result || !result.content || !Array.isArray(result.content) || !result.content[0]) {
-                      return "```\nNo valid data found in result.content\n```";
-                    }
-                  
-                    const textContent = result.content[0].text;
-                    let itemsData: LinearItem[];
-                    try {
-                      itemsData = JSON.parse(textContent);
-                    } catch (error) {
-                      return "```\nError parsing content: " + error + "\n```";
-                    }
-                  
-                    // Limit to 5 items max
-                    const limitedItems = itemsData.slice(0, 5);
-                  
-                    const formattedItems = limitedItems.map((item: LinearItem) => {
-                      const title = item.title ?? "N/A";
-                      const description = item.metadata?.context?.description?.snippet ?? "N/A";
-                      const url = item.url ?? "N/A";
-                      const status = item.status ?? "N/A";
-                      const assigneeLine = item.assignee && item.assignee !== "Unassigned"
+            const formatSimplifiedResult = (result: any): string => {
+                if (!result || !result.content || !Array.isArray(result.content) || !result.content[0]) {
+                    return "```\nNo valid data found in result.content\n```";
+                }
+
+                const textContent = result.content[0].text;
+                let itemsData: LinearItem[];
+                try {
+                    itemsData = JSON.parse(textContent);
+                } catch (error) {
+                    return "```\nError parsing content: " + error + "\n```";
+                }
+
+                // Limit to 5 items max
+                const limitedItems = itemsData.slice(0, 5);
+
+                const formattedItems = limitedItems.map((item: LinearItem) => {
+                    const title = item.title ?? "N/A";
+                    const description = item.metadata?.context?.description?.snippet ?? "N/A";
+                    const url = item.url ?? "N/A";
+                    const status = item.status ?? "N/A";
+                    const assigneeLine = item.assignee && item.assignee !== "Unassigned"
                         ? `Assignee: ${item.assignee}`
                         : "";
-                  
-                      const hyperlinkedTitle = url !== "N/A" ? `<${url}|${title}>` : title;
-                  
-                      return "```\n" + [
+
+                    const hyperlinkedTitle = url !== "N/A" ? `<${url}|${title}>` : title;
+
+                    return "```\n" + [
                         `Title: ${hyperlinkedTitle}`,
                         `Description: ${description}`,
                         `Status: ${status}`,
                         assigneeLine,
-                      ]
-                      .filter(line => line)
-                      .join("\n") + "\n```";
-                    });
-                  
-                    return formattedItems.join("\n\n");
-                  };
-        
+                    ]
+                        .filter(line => line)
+                        .join("\n") + "\n```";
+                });
+
+                return formattedItems.join("\n\n");
+            };
+
             const formattedResult = formatSimplifiedResult(linearIssues);
 
 
@@ -418,14 +414,22 @@ export const createRateMatchingTicketsNode = (
                 apiKey: process.env.OPENAI_API_KEY,
             });
 
-            // Prepare the prompt with user message and tickets data
+            // Get the previous LLM response
+            const previousLlmResponse = JSON.parse(context.results.queryLLM);
+            const imageDescription = previousLlmResponse?.image_description;
+
+            // Prepare the prompt with user message, previous LLM response, and tickets data
             const ratingPrompt = `${prompt}
                 <User message>
                 ${this.userMessage}
                 </User message>
 
+                <Image description>
+                ${imageDescription}
+                </Image description>
+
                 <Tickets from Linear>
-                ${JSON.stringify(linearIssues, null, 2)}
+                ${JSON.stringify(linearIssues.content, null, 2)}
                 </Tickets from Linear>`;
 
             console.log("Querying LLM to rate matching tickets");
@@ -443,13 +447,11 @@ export const createRateMatchingTicketsNode = (
             });
 
             const ratingResult = response.output_text;
-            console.log("Rating result:", ratingResult);
+            const formattedRatingResult = `\`\`\`\n${ratingResult}\n\`\`\``;
+            console.log("Rating result:", formattedRatingResult);
 
             // Send the rating results to the user
-            await sayFn(ratingResult);
-
-            // Store the rating results in the context
-            context.inputs.ticketRatings = ratingResult;
+            await sayFn(formattedRatingResult);
 
             return ratingResult;
         }

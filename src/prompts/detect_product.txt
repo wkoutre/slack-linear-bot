@@ -12,12 +12,13 @@ Uniswap products are:
 - Chrome extension (EXT)
   - A Chrome extension for managing your crypto assets
   - Allows users to send, receive, store and trade cryptocurrencies
-Output a response in the following json format:
+Output a response as a valid json object in the following json format, without any other text:
 
 {
   "product": "WEB", // WEB, MOB, EXT
   "confidence": 0.95, // 0-1
-  "reasoning": "The image shows a typical browser interface, with a search bar and a list of tokens."
+  "image_description": "A screenshot of the Uniswap web interface, showing a search bar and a typical layout for a swap interface, allowing the user to select the input and output tokens and their amounts.",
+  "reasoning": "The image shows a typical browser interface, with a search bar and a wide swap layout, typical to desktop computers, indicating that the product is the Uniswap web interface."
 }
 
 Analyze the following message and images to determine what product is being used:
