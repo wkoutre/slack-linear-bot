@@ -433,6 +433,12 @@ app.action("llm_result_confirm", async ({ ack, body, client, say }) => {
 
         console.log(`Using search query for Linear: "${searchQuery}"`);
 
+        // Optimize the search query to fit Linear's 256 character limit
+        searchQuery = await optimizeSearchQuery(searchQuery);
+        console.log(
+          `Optimized search query: "${searchQuery}" (${searchQuery.length} chars)`
+        );
+
         // Search Linear using the Linear tool
         const searchTool = tools.find(
           (t) => t.name === McpToolName.SearchIssues
@@ -851,6 +857,62 @@ async function analyzeMessageContent({
     await sendResponse(
       `Sorry, I encountered an error analyzing your message: ${errorMessage}`
     );
+  }
+}
+
+// Function to optimize a search query for Linear using OpenAI
+async function optimizeSearchQuery(query: string): Promise<string> {
+  // If the query is already short enough, return it as is
+  if (query.length <= 256) {
+    return query;
+  }
+
+  // Create a prompt for OpenAI to optimize the query
+  const prompt = `
+You are assisting in optimizing a search query for Linear (issue tracking system).
+The original search query is too long and needs to be shortened to fit within 256 characters.
+
+Original query: "${query}"
+
+Rules:
+1. Your output MUST be 256 characters or fewer
+2. Preserve the most important keywords and context
+3. Remove unnecessary words, articles, and filler content
+4. Focus on technical terms, product names, and descriptive adjectives
+5. Output ONLY the optimized query, nothing else - no explanations or comments
+
+Optimized query:`;
+
+  try {
+    // Call OpenAI to optimize the query
+    const { OpenAI } = await import("openai");
+    const llm = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+
+    console.log("Sending query to OpenAI for optimization:", query);
+
+    const response = await llm.completions.create({
+      model: "gpt-3.5-turbo-instruct",
+      prompt,
+      max_tokens: 100,
+      temperature: 0.3,
+    });
+
+    const optimizedQuery = response.choices[0]?.text?.trim() || "";
+
+    console.log(
+      `Optimized query: "${optimizedQuery}" (${optimizedQuery.length} chars)`
+    );
+
+    // As a final safety check, still truncate if somehow the optimization went wrong
+    return optimizedQuery.length <= 256
+      ? optimizedQuery
+      : optimizedQuery.substring(0, 256);
+  } catch (error) {
+    console.error("Error optimizing query:", error);
+    // Fallback: simply truncate the query if optimization fails
+    return query.substring(0, 256);
   }
 }
 
