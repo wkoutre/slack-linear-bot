@@ -13,6 +13,15 @@ import { McpToolName } from "./enums.js";
 
 dotenv.config();
 
+type LinearSearchParameters = {
+  query: string;
+  teamId?: string;
+  assigneeId?: string;
+  projectId?: string;
+  states?: string[]; // status of the issue, usually TODO, In Progress, Done
+  limit?: number;
+};
+
 // Simple in-memory state store to track user conversations
 interface UserState {
   isInEditMode: boolean;
@@ -453,9 +462,9 @@ app.action("llm_result_confirm", async ({ ack, body, client, say }) => {
         );
 
         // Prepare search parameters
-        const parameters = {
+        const parameters: LinearSearchParameters = {
           query: searchQuery,
-          first: 10,
+          limit: 10,
         };
 
         // Call the Linear search tool directly
