@@ -1,7 +1,9 @@
 import Bolt, {
   AllMiddlewareArgs,
   SlackEventMiddlewareArgs,
-  GenericMessageEvent, // Import specific message type
+  GenericMessageEvent,
+  SlackActionMiddlewareArgs,
+  BlockAction, 
 } from "@slack/bolt";
 import dotenv from "dotenv";
 import { getMcpClient, markAsDisconnected } from "./mcp_client.js"; // Import MCP client and markAsDisconnected
@@ -9,6 +11,19 @@ import util from "util"; // For formatting the output
 import { McpToolName } from "./enums.js";
 
 dotenv.config();
+
+const emojiButtons = [
+  { emoji: "👍", text: "To create a new ticket:\n\nClick on `More Actions` on the top right of the message.\nClick on `Create New Issue`", actionId: "great_job" },
+  { emoji: ":x:", text: "Gotcha, going to sleep :sleeping:", actionId: "ready_launch" },
+];
+
+interface LinearItem {
+  description: string;
+  title: string;
+  url: string;
+  status: string;
+  assignee?: string;
+}
 
 const appToken = process.env.SLACK_APP_TOKEN;
 if (!appToken) {
@@ -208,14 +223,85 @@ app.message(async ({ message, say }: SlackEventMiddlewareArgs<"message">) => {
       }
 
       console.log("MCP Tool Result:", result);
-      const formattedResult =
-        "```\n" +
-        util.inspect(result, { depth: null, colors: false }) +
-        "\n```";
+     
+      const formatSimplifiedResult = (result: any): string => {
+        if (!result || !result.content || !Array.isArray(result.content) || !result.content[0]) {
+          return "```\nNo valid data found in result.content\n```";
+        }
+      
+        const textContent = result.content[0].text;
+        let itemsData: LinearItem[];
+        try {
+          itemsData = JSON.parse(textContent);
+        } catch (error) {
+          return "```\nError parsing content: " + error + "\n```";
+        }
+      
+        // Limit to 5 items max
+        const limitedItems = itemsData.slice(0, 5);
+
+       
+      
+        const formattedItems = limitedItems.map((item: LinearItem) => {
+          console.log(item)
+          const title = item.title ?? "N/A";
+          const description = item.description ?? "N/A"; 
+          const url = item.url ?? "N/A";
+          const status = item.status ?? "N/A";
+          const assigneeLine = item.assignee && item.assignee !== "Unassigned"
+            ? `Assignee: ${item.assignee}`
+            : "";
+      
+          const hyperlinkedTitle = url !== "N/A" ? `<${url}|${title}>` : title;
+      
+          return "```\n" + [
+            `Title: ${hyperlinkedTitle}`,
+            `Description: ${description}`,
+            `Status: ${status}`,
+            assigneeLine,
+          ]
+          .filter(line => line)
+          .join("\n") + "\n```";
+        });
+      
+        return formattedItems.join("\n\n");
+      };
+
+      const formattedResult = formatSimplifiedResult(result);
+      console.log(formattedResult)
       await say({
         text: `Found potential matches in Linear:\n${formattedResult}`,
         thread_ts: thread_ts,
       });
+      
+
+      await say({
+        blocks: [
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: `Would you like to create a linear ticket?`,
+            },
+          },
+          {
+            type: "actions",
+            elements: emojiButtons.map(button => ({
+              type: "button",
+              text: {
+                type: "plain_text",
+                text: button.emoji,
+                emoji: true,
+              },
+              action_id: button.actionId,
+              value: button.text,
+            })),
+          },
+        ],
+        thread_ts,
+        text: "Linear results", // Fallback text
+      });
+
     } catch (error) {
       // Outer catch for non-retried errors or final failure
       console.error("Error during Linear search or processing (final):", error);
@@ -232,6 +318,27 @@ app.message(async ({ message, say }: SlackEventMiddlewareArgs<"message">) => {
     }
   }
 });
+
+app.action(
+  { type: "block_actions" }, // Constraint for block actions
+  async ({ action, body, ack, say }: SlackActionMiddlewareArgs<BlockAction>) => {
+    await ack(); 
+
+    if (action.type === "button" && "value" in action) {
+      const thread_ts = body.message?.ts || body.container?.message_ts;
+
+      if (thread_ts && say) {
+        await say({
+          text: action.value, 
+          thread_ts,
+        });
+      } else {
+        console.error("Missing thread_ts or say function", { thread_ts, say });
+      }
+    }
+  }
+);
+
 
 // Basic error handler
 app.error(async (error: Error) => {
