@@ -1,12 +1,11 @@
 import Bolt, {
-  AllMiddlewareArgs,
   SlackEventMiddlewareArgs,
   GenericMessageEvent, // Import specific message type
 } from "@slack/bolt";
 import dotenv from "dotenv";
 import { getMcpClient, markAsDisconnected } from "./mcp_client.js"; // Import MCP client and markAsDisconnected
 import util from "util"; // For formatting the output
-import { McpToolName } from "./enums.js";
+import { processMessageWithLLM, type McpTool, type LlmResponse } from "./llmquery.js";
 
 dotenv.config();
 
@@ -26,66 +25,10 @@ const app = new Bolt.App({
   appToken: appToken, // Use the App-Level Token
 });
 
-// Define expected type for a tool object from listTools
-// (Making it more specific based on common MCP patterns)
-type McpTool = {
-  name: McpToolName;
-  description?: string;
-  arguments?: any; // Adjust as needed based on actual SDK types
-  // Add other potential properties if known
-};
-
-// Interface for the expected LLM response - uses McpTool now
-interface LlmResponse {
-  tool: McpTool | null;
-  parameters: Record<string, any> | null;
-  error?: string; // Optional error message from LLM/processing
-}
-
-// Updated placeholder function: Always targets search_issues
-async function processMessageWithLLM(
-  text: string,
-  availableTools: McpTool[]
-): Promise<LlmResponse> {
-  console.log("Processing message (placeholder logic):", text);
-  const availableToolNames = availableTools.map((t) => t.name);
-  console.log("Available tools:", availableToolNames);
-
-  // --- Step 1: LLM Parsing/Clarification Placeholder ---
-  // When LLM is available, it would process 'text' here.
-  // The output should ideally be a structured query or parameters.
-  // For now, we'll use the raw text as the search query.
-  const processedQuery = text;
-  // --- End LLM Placeholder ---
-
-  // --- Step 2: Always find and prepare the search tool ---
-  const searchTool = availableTools.find(
-    (t) => t.name === McpToolName.SearchIssues
-  );
-
-  if (searchTool) {
-    console.log(`Found ${McpToolName.SearchIssues} tool. Preparing call.`);
-    return {
-      tool: searchTool,
-      parameters: { query: processedQuery }, // Use processed text from (future) LLM
-    };
-  }
-
-  // Fallback if search tool isn't available for some reason
-  console.error(
-    `${McpToolName.SearchIssues} tool not found in available tools!`
-  );
-  return {
-    tool: null,
-    parameters: null,
-    error: "Linear search tool is currently unavailable.",
-  };
-}
-
 // Listen to any message posted in a channel the bot is part of or DMs
 app.message(async ({ message, say }: SlackEventMiddlewareArgs<"message">) => {
   // Check if it's a regular user message (not a subtype like edit/delete/join)
-  if (message.subtype === undefined) {
+  if (message.subtype === undefined || message.subtype === "file_share") {
     // Cast to GenericMessageEvent for type safety
     const userMessage = message as GenericMessageEvent;
 
@@ -98,9 +41,10 @@ app.message(async ({ message, say }: SlackEventMiddlewareArgs<"message">) => {
     const userId = userMessage.user;
     const channelId = userMessage.channel; // Explicitly get channel ID
     const thread_ts = userMessage.thread_ts || userMessage.ts;
+    const files = userMessage.files?.map((f) => f.url_private_download).filter((url) => url !== undefined) || []; // Get files array if present
 
     console.log(
-      `Received message from ${userId} in channel ${channelId}: "${text}"`
+      `Received message from ${userId} in channel ${channelId}: "${text}" ${files.length > 0 ? `with ${files.length} file(s)` : ""}`
     );
 
     // Use the say function from the context for acknowledgement
@@ -150,8 +94,10 @@ app.message(async ({ message, say }: SlackEventMiddlewareArgs<"message">) => {
           const toolNames = tools.map((t) => t.name); // Get names for logging if needed
           console.log(`MCP Tools Available: ${toolNames.join(", ")}`);
 
-          // Process message - Step 1 (placeholder) & Step 2 (prepare search)
-          const llmResponse = await processMessageWithLLM(text, tools);
+          // Process message using the refactored LLM pipeline
+          const llmResponse = await processMessageWithLLM(text, tools, files, async (message: string) => {
+            await say({ text: message, thread_ts });
+          });
 
           if (
             llmResponse.error ||
