@@ -7,8 +7,10 @@ For each ticket:
 3. Consider factors like:
    - How closely the ticket addresses the specific issue or feature mentioned by the user
    - Whether the ticket solves the underlying problem or need
-   
-Sort the tickets from highest to lowest rating and output your response as a valid json object in the following format, without any other text:
+
+Return only the tickets that are relevant to the user's message (score >= 8). It is possible that the user's message is not related to any of the tickets, in which case you should return an empty array.
+
+Sort the tickets from highest to lowest rating and output your response as a **valid json object** in the following format, without any other text:
 
 {
   "ticket_ratings": [

@@ -257,10 +257,11 @@ export const createQueryLLMNode = (
                 ]
             });
 
-            const formattedResponse = `\`\`\`\n${response.output_text}\n\`\`\``;
+            const cleanedResponse = response.output_text.replace(/```json\n/g, "").replace(/\n```/g, "");
+            const formattedResponse = `\`\`\`\n${cleanedResponse}\n\`\`\``;
             console.log("LLM Response:", formattedResponse);
             await sayFn(formattedResponse);
-            return response.output_text;
+            return cleanedResponse;
         }
     };
 };
@@ -330,9 +331,6 @@ export const createLinearSearchNode = (
                 error: "Linear search tool is currently unavailable.",
             };
 
-            // Store the error result in the context
-            context.inputs.linearSearchResult = errorResult;
-
             return errorResult;
         }
     };
@@ -355,7 +353,6 @@ export const createRateMatchingTicketsNode = (
             const linearIssues = context.results.linearSearchResults || [];
 
             // Format and display the raw search results
-
             const formatSimplifiedResult = (result: any): string => {
                 if (!result || !result.content || !Array.isArray(result.content) || !result.content[0]) {
                     return "```\nNo valid data found in result.content\n```";
@@ -397,7 +394,6 @@ export const createRateMatchingTicketsNode = (
             };
 
             const formattedResult = formatSimplifiedResult(linearIssues);
-
 
             await sayFn(`Found potential matches in Linear:\n${formattedResult}`);
 
@@ -446,14 +442,21 @@ export const createRateMatchingTicketsNode = (
                 ]
             });
 
-            const ratingResult = response.output_text;
-            const formattedRatingResult = `\`\`\`\n${ratingResult}\n\`\`\``;
+            const cleanedResponse = response.output_text.replace(/```json\n/g, "").replace(/\n```/g, "");
+            const formattedRatingResult = `\`\`\`\n${cleanedResponse}\n\`\`\``;
             console.log("Rating result:", formattedRatingResult);
 
-            // Send the rating results to the user
-            await sayFn(formattedRatingResult);
+            if (JSON.parse(cleanedResponse).ticket_ratings.length === 0) {
+                const noRatingsMessage = "No tickets match the user feedback.";
+                console.log(noRatingsMessage);
+                await sayFn(noRatingsMessage);
+                return noRatingsMessage;
+            } else {
+                // Send the rating results to the user
+                await sayFn(formattedRatingResult);
+            }
 
-            return ratingResult;
+            return cleanedResponse;
         }
     };
 };
