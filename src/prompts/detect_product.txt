@@ -12,6 +12,7 @@ Uniswap products are:
 - Chrome extension (EXT)
   - A Chrome extension for managing your crypto assets
   - Allows users to send, receive, store and trade cryptocurrencies
+Be specific on the image description. Describe the content of the UI elements in the image, reasoning about their function and purpose.
 Output a response as a valid json object in the following json format, without any other text:
 
 {
