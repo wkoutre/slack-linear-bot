@@ -1,0 +1,67 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# CURSOR RULE: Incremental Integration and Preservation
+
+## GOAL
+Always prioritize understanding and integrating with existing code while preserving current functionality when adding new features.
+
+## PROCEDURE
+
+### 1. ANALYSIS PHASE
+- Before modifying any code, thoroughly scan and understand:
+  - Current implementation patterns
+  - Naming conventions
+  - Architecture design
+  - Code organization
+  - Error handling approaches
+  - State management patterns
+  - Existing functions and their responsibilities
+- Identify reusable components and utilities
+  - Note functions that can be extended rather than replaced
+  - Recognize patterns that should be maintained for consistency
+
+### 2. INTEGRATION STRATEGY
+- Default approach: extend rather than replace
+  - Add to existing functions when possible
+  - Keep current parameter signatures
+  - Maintain return value structures
+- For new functionality:
+  - Follow existing patterns
+  - Use similar naming conventions
+  - Match error handling approaches
+  - Integrate with current state management
+
+### 3. MODIFICATION BOUNDARY PROTOCOL
+- If forced to substantially modify existing functionality:
+  - STOP implementation
+  - Clearly explain:
+    - What existing code needs modification
+    - Why the modification is necessary
+    - Potential impacts on other code areas
+    - Alternative approaches considered
+  - Request explicit user approval before proceeding
+
+### 4. INCREMENTAL IMPLEMENTATION
+- When approved to proceed:
+  - Implement changes in small, testable increments
+  - Preserve original code in comments until confirmed working
+  - Ensure backward compatibility where possible
+  - Document all modifications with clear rationale
+
+### 5. VALIDATION APPROACH
+- After implementation:
+  - Confirm all existing functionality works as before
+  - Verify new functionality meets requirements
+  - Check for edge cases introduced by changes
+  - Ensure error handling remains consistent
+
+## EXAMPLE APPLICATION
+When asked to add a new feature to an existing React component:
+1. Keep the current component structure
+2. Preserve all existing props
+3. Maintain current state management approach
+4. Add new functionality as extension, not replacement
+5. If breaking changes are required, pause and consult user
