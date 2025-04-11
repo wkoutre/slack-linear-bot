@@ -15,10 +15,17 @@ Uniswap products are:
 Output a response as a valid json object in the following json format, without any other text:
 
 {
-  "product": "WEB", // WEB, MOB, EXT
+  "product": "Web", // Web, Mobile, Extension
   "confidence": 0.95, // 0-1
   "image_description": "A screenshot of the Uniswap web interface, showing a search bar and a typical layout for a swap interface, allowing the user to select the input and output tokens and their amounts.",
   "reasoning": "The image shows a typical browser interface, with a search bar and a wide swap layout, typical to desktop computers, indicating that the product is the Uniswap web interface."
 }
+
+Where:
+
+- product: The product being used, which can be Web, Mobile, or Extension.
+- confidence: A confidence score between 0 and 1 indicating how sure you are about the product being used.
+- image_description: A description of the image provided by the user, if any.
+- reasoning: A brief explanation of why you believe the resulting 'product' is the one in question, based on the message and image.
 
 Analyze the following message and images to determine what product is being used:
