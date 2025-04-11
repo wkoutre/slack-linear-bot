@@ -8,8 +8,11 @@ import {
   processMessageWithLLM,
   type McpTool,
   type LlmResponse,
+  ImageContent,
 } from "./llmquery.js";
 import { McpToolName } from "./enums.js";
+import path from "node:path";
+import fs from "node:fs";
 
 dotenv.config();
 
@@ -313,7 +316,7 @@ app.message(async ({ message, say }: SlackEventMiddlewareArgs<"message">) => {
 
         // Execute a new search with the refined query
         await executeLinearSearch({
-          query: refinedQuery,
+          query: noResultsData.originalQuery,
           threadTs: thread_ts,
           channelId,
           userId,
@@ -360,7 +363,7 @@ app.message(async ({ message, say }: SlackEventMiddlewareArgs<"message">) => {
 
         // Execute a new search with the refined query
         await executeLinearSearch({
-          query: refinedQuery,
+          query: resultsData.originalQuery,
           threadTs: thread_ts,
           channelId,
           userId,
@@ -932,7 +935,7 @@ app.action("llm_result_confirm", async ({ ack, body, client, say }) => {
 
         // Execute the Linear search
         await executeLinearSearch({
-          query: searchQuery,
+          query: originalMessage,
           threadTs: threadTs || "",
           channelId: channelId || "",
           userId,
@@ -1253,9 +1256,63 @@ async function analyzeMessageContent({
         "Respond in JSON format.";
     }
 
+      // Download and convert images to base64
+      const imageContents: ImageContent[] = [];
+    if (files.length > 0) {
+      // Ensure temp directory exists for saving images
+      const tempDir = path.join(process.cwd(), "temp");
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+
+      for (const fileUrl of files) {
+        try {
+          // Generate a unique filename for the image
+          const fileExtension = path.extname(fileUrl) || ".jpg";
+          const fileName = `image_${Date.now()}_${Math.floor(
+            Math.random() * 1000
+          )}${fileExtension}`;
+          const filePath = path.join(tempDir, fileName);
+
+          console.log(`Downloading image from ${fileUrl}`);
+          // Download the image using fetch
+          const response = await fetch(fileUrl, {
+            headers: {
+              Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}`,
+            },
+          });
+
+          // Get the array buffer from the response
+          const arrayBuffer = await response.arrayBuffer();
+
+          // Save the file locally
+          fs.writeFileSync(filePath, Buffer.from(arrayBuffer));
+          console.log(`Saved image to ${filePath}`);
+
+          // Read the file and convert to base64
+          const base64Image = fs.readFileSync(filePath, "base64");
+
+          // Determine mime type based on file extension
+          const extension = path.extname(fileUrl).toLowerCase();
+          let mimeType = "image/jpeg"; // Default
+          if (extension === ".png") mimeType = "image/png";
+          else if (extension === ".gif") mimeType = "image/gif";
+          else if (extension === ".webp") mimeType = "image/webp";
+
+          imageContents.push({
+            type: "input_image" as const,
+            image_url: `data:${mimeType};base64,${base64Image}`,
+            detail: "auto" as const,
+          });
+        } catch (error) {
+          console.error(`Error downloading image ${fileUrl}:`, error);
+        }
+      }
+    }
+
     // Call the LLM
     const response = await llm.responses.create({
-      model: "gpt-4o-mini",
+      model: "gpt-4o",
       input: [
         {
           role: "user",
@@ -1266,17 +1323,21 @@ async function analyzeMessageContent({
                 files.length > 0
               }</has_images>`,
             },
+            ...imageContents,
           ],
         },
       ],
     });
 
     // Parse the response into a structured format
-    console.log("Raw LLM response:", response.output_text);
+    const cleanedResponse = response.output_text
+      .replace(/^```json\n/, "")
+      .replace(/\n```$/, "");
+    console.log("Raw LLM response:", cleanedResponse);
 
     let typedOutput;
     try {
-      typedOutput = JSON.parse(response.output_text);
+      typedOutput = JSON.parse(cleanedResponse);
     } catch (parseError) {
       console.error("Failed to parse LLM response as JSON:", parseError);
       await sendResponse(
